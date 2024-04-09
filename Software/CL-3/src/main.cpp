@@ -38,14 +38,20 @@ void setValue()
         digitalWrite(NUM_PIN[i], LOW);
     for (int i = 0; i < 6; i++)
     {
-        digitalWrite(NUM_PIN[dispValueTable[i]], HIGH);
-        delayMicroseconds(10);
+        // digitalWrite(NUM_PIN[dispValueTable[i]], LOW);
+        // delayMicroseconds(10);
         digitalWrite(DIG_PIN[i], HIGH);
         delayMicroseconds(10);
         digitalWrite(DIG_PIN[i], LOW);
-        delayMicroseconds(10);
-        digitalWrite(NUM_PIN[dispValueTable[i]], LOW);
+        // delayMicroseconds(10);
+        // digitalWrite(NUM_PIN[dispValueTable[i]], LOW);
     }
+    digitalWrite(NUM_PIN[3], HIGH);
+    digitalWrite(DIG_PIN[3], HIGH);
+    delayMicroseconds(10);
+    digitalWrite(DIG_PIN[3], LOW);
+    digitalWrite(NUM_PIN[3], LOW);
+
 }
 void updateTable()
 {
@@ -82,6 +88,19 @@ void setup()
     adc1_config_width(ADC_WIDTH_BIT_12);
     adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
     ledcWrite(PWM_CHANNEL, pwmValue);
+    for (int i = 0; i < 10; i++)
+        digitalWrite(NUM_PIN[i], LOW);
+    for (int i = 0; i < 6; i++)
+    {
+        // digitalWrite(NUM_PIN[dispValueTable[i]], LOW);
+        // delayMicroseconds(10);
+        digitalWrite(DIG_PIN[i], HIGH);
+        delayMicroseconds(10);
+        digitalWrite(DIG_PIN[i], LOW);
+        // delayMicroseconds(10);
+        // digitalWrite(NUM_PIN[dispValueTable[i]], LOW);
+    }
+
 }
 float highestVoltage = 0;
 uint32_t bestFreq = 0;
@@ -91,16 +110,17 @@ void loop()
     ledcWrite(PWM_CHANNEL, pwmValue);
     analogValue = adc1_get_raw(ADC1_CHANNEL_0);
     float voltageValue = analogValue * 0.04815;
-    if (170 < voltageValue)
-    {
-        if (pwmValue > 0)
-            pwmValue--;
-    }
-    else
-    {
-        if (pwmValue < 125)
-            pwmValue++;
-    }
+    pwmValue=125;
+    // if (170 < voltageValue)
+    // {
+    //     if (pwmValue > 0)
+    //         pwmValue--;
+    // }
+    // else
+    // {
+    //     if (pwmValue < 125)
+    //         pwmValue++;
+    // }
     // if (highestVoltage < voltageValue)
     //{
     //      bestFreq = ledcReadFreq(PWM_CHANNEL);
@@ -116,17 +136,44 @@ void loop()
     // }
 
     DateTime time = rtc.now();
+    digitalWrite(NUM_PIN[3], HIGH);
+    digitalWrite(DIG_PIN[3], HIGH);
+    delayMicroseconds(10);
+    digitalWrite(DIG_PIN[3], LOW);
+    digitalWrite(NUM_PIN[3], LOW);
+    delay(2);
+    digitalWrite(DIG_PIN[3], HIGH);
+    delayMicroseconds(10);
+    digitalWrite(DIG_PIN[3], LOW);
 
-    if (newValue != dispValue)
-    {
-        updateTable();
-        setValue();
-    }
-    if (voltageValue > 130)
-    {
-        delay(1000);
-        newValue += 111111;
-        if (newValue > 999999)
-            newValue = 0;
-    }
+    digitalWrite(NUM_PIN[2], HIGH);
+    digitalWrite(DIG_PIN[2], HIGH);
+    delayMicroseconds(10);
+    digitalWrite(DIG_PIN[2], LOW);
+    digitalWrite(NUM_PIN[2], LOW);
+    delay(2);
+    digitalWrite(DIG_PIN[2], HIGH);
+    delayMicroseconds(10);
+    digitalWrite(DIG_PIN[2], LOW);
+
+    digitalWrite(NUM_PIN[8], HIGH);
+    digitalWrite(DIG_PIN[6], HIGH);
+    delayMicroseconds(10);
+    digitalWrite(DIG_PIN[6], LOW);
+    digitalWrite(NUM_PIN[8], LOW);
+    delay(2);
+    digitalWrite(DIG_PIN[6], HIGH);
+    delayMicroseconds(10);
+    digitalWrite(DIG_PIN[6], LOW);
+
+    digitalWrite(NUM_PIN[7], HIGH);
+    digitalWrite(DIG_PIN[4], HIGH);
+    delayMicroseconds(10);
+    digitalWrite(DIG_PIN[4], LOW);
+    digitalWrite(NUM_PIN[7], LOW);
+    delay(2);
+    digitalWrite(DIG_PIN[4], HIGH);
+    delayMicroseconds(10);
+    digitalWrite(DIG_PIN[4], LOW);
+    
 }
