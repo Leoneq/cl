@@ -39,7 +39,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define RTC_ADDRESS 0xD0
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -50,12 +50,12 @@
 /* Private variables ---------------------------------------------------------*/
 ADC_HandleTypeDef hadc1;
 
+I2C_HandleTypeDef hi2c1;
+
 RTC_HandleTypeDef hrtc;
 
 TIM_HandleTypeDef htim3;
 TIM_HandleTypeDef htim14;
-
-UART_HandleTypeDef huart1;
 
 /* USER CODE BEGIN PV */
 
@@ -69,7 +69,7 @@ static const uint16_t gpio_pins[] = { 4, 0, 1, 4, 2 };
 RTC_TimeTypeDef time;
 RTC_DateTypeDef date;
 
-volatile uint8_t isPressed = 3; // Zmienna do zapamiętania który przycisk został wciśnięty, jeżeli jest równa 3 to nic nie było wciśnięte
+volatile uint8_t isPressed = 3; // Zmienna do zapamiętania który przycisk zosta?��? wciśnięty, jeżeli jest równa 3 to nic nie było wciśnięte
 volatile uint32_t actTick = 0; // Zmienna do zapamiętania czasu wciśnięcia przycisku
 volatile int dispValue = 0; // Wyświetlana liczba
 volatile int curDig = 0; // Wyświetlana Cyfra
@@ -79,14 +79,14 @@ uint8_t setupMode = 0; // Jeżeli jest większe od zera to zegarek jest w trybie
 uint8_t setupDig = 0;
 uint8_t newDig = 0;
 uint16_t pwm = 50;
-uint16_t brightness= 0;
+uint16_t brightness = 0;
 uint16_t onBright = 50;
 uint16_t offBright = 5;
 uint16_t onTime = 0000;
 uint16_t offTime = 0000;
 
 // Ustawianie segmentów
-const uint8_t digits[11] = { 0b00111111, // 0
+const uint8_t digits[15] = { 0b00111111, // 0
 		0b00000110, // 1
 		0b01011011, // 2
 		0b01001111, // 3
@@ -96,152 +96,29 @@ const uint8_t digits[11] = { 0b00111111, // 0
 		0b00000111, // 7
 		0b01111111, // 8
 		0b01101111, // 9
-		0b00000000  // Blank
-		};
+		0b00000000, // Blank
+		0b01111001, 0b01000100, 0b01000100, 0b00000000 };
 static GPIO_TypeDef *const SEG_Port[] = { SA_GPIO_Port, SB_GPIO_Port,
 SC_GPIO_Port, SD_GPIO_Port, SE_GPIO_Port, SF_GPIO_Port, SG_GPIO_Port,
 SDP_GPIO_Port };
 
 static const uint16_t SEG_Pin[] = { SA_Pin, SB_Pin, SC_Pin, SD_Pin, SE_Pin,
 SF_Pin, SG_Pin, SDP_Pin };
-
-//Zmienne potrzebne do Snake
-volatile uint32_t dispValeForSnake = 0;
-volatile uint8_t snakeLenth = 3;
-volatile uint8_t snakeButton = 0; //0-none 1-left 2-right
-volatile uint8_t snakeDir = 2; // 1-up 2-left 3-down 4-right
-volatile uint8_t xCord[22];
-volatile uint8_t yCord[22];
-long snakeTick = 0;
-
-const uint8_t cordsToDisp[7][11] = { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, { 0,
-		0, 24, 0, 16, 0, 8, 0, 0, 0, 0 },
-		{ 0, 29, 0, 21, 0, 13, 0, 5, 0, 1, 0 }, { 0, 0, 30, 0, 22, 0, 14, 0, 6,
-				0, 0 }, { 0, 28, 0, 20, 0, 12, 0, 4, 0, 2, 0 }, { 0, 0, 27, 0,
-				19, 0, 11, 0, 3, 0, 0 }, { 0, 0, 30, 0, 0, 0, 0, 0, 0, 0, 0 } };
-
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_ADC1_Init(void);
-static void MX_RTC_Init(void);
 static void MX_TIM3_Init(void);
-static void MX_USART1_UART_Init(void);
 static void MX_TIM14_Init(void);
+static void MX_RTC_Init(void);
+static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-//Funkcje do snake'a
-void moveSnake(uint8_t leftOrRight) {
-	for (int i = snakeLenth; i > 0; i--) {
-		xCord[i] = xCord[i - 1];
-		yCord[i] = yCord[i - 1];
-	}
-	switch (snakeDir) {
-	case 1:
-		yCord[0]--;
-		break;
-	case 2:
-		xCord[0]++;
-		break;
-	case 3:
-		yCord[0]++;
-		break;
-	case 4:
-		xCord[0]--;
-		break;
-	}
-
-	if (leftOrRight == 1) {
-		switch (snakeDir) {
-		case 1:
-			xCord[0]--;
-			snakeDir = 4;
-			break;
-		case 2:
-			yCord[0]--;
-			snakeDir = 1;
-			break;
-		case 3:
-			xCord[0]++;
-			snakeDir = 2;
-			break;
-		case 4:
-			yCord[0]++;
-			snakeDir = 3;
-			break;
-		}
-
-	} else if (leftOrRight == 2) {
-		switch (snakeDir) {
-		case 1:
-			xCord[0]++;
-			snakeDir = 2;
-			break;
-		case 2:
-			yCord[0]++;
-			snakeDir = 3;
-			break;
-		case 3:
-			xCord[0]--;
-			snakeDir = 4;
-			break;
-		case 4:
-			yCord[0]--;
-			snakeDir = 1;
-			break;
-		}
-	} else {
-		switch (snakeDir) {
-		case 1:
-			yCord[0]--;
-			break;
-		case 2:
-			xCord[0]++;
-			break;
-		case 3:
-			yCord[0]++;
-			break;
-		case 4:
-			xCord[0]--;
-			break;
-		}
-	}
-
-	if (yCord[0] <= 0) {
-		yCord[0] = 4;
-	} else if (yCord[0] >= 6) {
-		yCord[0] = 2;
-	}
-	if (xCord[0] <= 0) {
-		xCord[0] = 8;
-	} else if (xCord[0] >= 10) {
-		xCord[0] = 2;
-	}
-}
-
-void updateSnakeValue() {
-	dispValeForSnake = 0;
-	for (int i = 0; i < snakeLenth; i++) {
-		dispValeForSnake |= (1 << cordsToDisp[yCord[i]][xCord[i]]);
-	}
-}
-
-void setByte(uint8_t byte) {
-	for (int i = 0; i < 8; i++) {
-		HAL_GPIO_WritePin(SEG_Port[i], SEG_Pin[i],
-				((((byte >> i) & 1) == 1) ? GPIO_PIN_SET : GPIO_PIN_RESET));
-
-	}
-}
-
-//Koniec funkcji do snake'a
-
 void setDigit(int digit) {
 	for (int i = 0; i < 8; i++) {
 		HAL_GPIO_WritePin(SEG_Port[i], SEG_Pin[i],
@@ -256,17 +133,12 @@ void customTick() {
 		actTick++;
 }
 
-// Obsługa przerwań wywoływanych przez przyciski
+// Obsługa przerwa?��? wywoływanych przez przyciski
 void swToggle(uint16_t GPIO_Pin) {
 	if ((HAL_GPIO_ReadPin(GPIOD, GPIO_Pin) == GPIO_PIN_RESET)
 			&& (isPressed == 3)) {
 		actTick = 0;
 		isPressed = GPIO_Pin;
-		if ((gpio_pins[GPIO_Pin] + 1) == 1) {
-			snakeButton = 2;
-		} else if ((gpio_pins[GPIO_Pin] + 1) == 3) {
-			snakeButton = 1;
-		}
 	} else if ((HAL_GPIO_ReadPin(GPIOD, GPIO_Pin) == GPIO_PIN_SET)
 			&& (isPressed == GPIO_Pin)) {
 		if (actTick > 50 && actTick < 700) {
@@ -298,8 +170,8 @@ void TIM14_Callback() {
 	} else if (delay == 5) {
 		HAL_GPIO_WritePin(DIG_Port[(curDig + 3) % 4], DIG_Pin[(curDig + 3) % 4],
 				GPIO_PIN_RESET);
-		if (setupMode == 5) {
-			setByte((dispValeForSnake >> (curDig * 8)) % 100000000);
+		if (HAL_I2C_IsDeviceReady(&hi2c1,RTC_ADDRESS, 3,5) != HAL_OK) {
+			setDigit(14 -  curDig);
 		} else if (setupDig == curDig
 				&& (setupMode == 1 || setupMode == 3 || setupMode == 4)) {
 			setDigit(
@@ -381,10 +253,10 @@ int main(void) {
 	/* Initialize all configured peripherals */
 	MX_GPIO_Init();
 	MX_ADC1_Init();
-	MX_RTC_Init();
 	MX_TIM3_Init();
-	MX_USART1_UART_Init();
 	MX_TIM14_Init();
+	MX_RTC_Init();
+	MX_I2C1_Init();
 	/* USER CODE BEGIN 2 */
 	HAL_ADCEx_Calibration_Start(&hadc1);
 	HAL_TIM_Base_Start_IT(&htim14);
@@ -397,8 +269,6 @@ int main(void) {
 			(HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2) != 0) ?
 					HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR2) : 50;
 	offBright = HAL_RTCEx_BKUPRead(&hrtc, RTC_BKP_DR3);
-	xCord[0] = 2;
-	yCord[0] = 1;
 
 	/* USER CODE END 2 */
 
@@ -422,44 +292,26 @@ int main(void) {
 				pwm++;
 		}
 		__HAL_TIM_SET_COMPARE(&htim3, TIM_CHANNEL_1, pwm);
-		if(voltage < 10 ){
-			if ((HAL_GPIO_ReadPin(GPIOD, SW0_Pin) == GPIO_PIN_RESET)
-					&& (HAL_GPIO_ReadPin(GPIOD, SW1_Pin) == GPIO_PIN_RESET)
-					&& (HAL_GPIO_ReadPin(GPIOD, SW2_Pin) == GPIO_PIN_RESET)) {
-				setupMode = 5;
-				brightness= 50;
-			} else {
-				setupMode = 0;
-			}
-		}
-		if (setupMode == 5) {
-			if (HAL_GetTick() > (snakeTick + 750)) {
-				moveSnake(snakeButton);
-				updateSnakeValue();
-				snakeTick = HAL_GetTick();
-				snakeButton = 0;
-			}
-		} else if (setupMode == 0) { // Dla setupMode równego 0 zegarek pracuje normalnie
-			HAL_RTC_GetTime(&hrtc, &time, RTC_FORMAT_BIN);
-			HAL_RTC_GetDate(&hrtc, &date, RTC_FORMAT_BIN);
+		if (setupMode == 0) { // Dla setupMode równego 0 zegarek pracuje normalnie
+
 			if (dispValue % 100 != time.Minutes) {
 				dispValue = (time.Hours * 100) + time.Minutes;
 			}
 			if (onTime < offTime) {
 				if (dispValue >= onTime && dispValue < offTime) {
-					brightness= onBright;
+					brightness = onBright;
 				} else {
-					brightness= offBright;
+					brightness = offBright;
 				}
 
 			} else if (onTime > offTime) {
 				if (dispValue < onTime && dispValue >= offTime) {
-					brightness= offBright;
+					brightness = offBright;
 				} else {
-					brightness= onBright;
+					brightness = onBright;
 				}
 			} else {
-				brightness= onBright;
+				brightness = onBright;
 			}
 			if (clickType == 5) {
 				clickType = 0;
@@ -467,7 +319,7 @@ int main(void) {
 				setupMode++;
 			}
 		} else if (setupMode != 5) {
-			brightness= 50;
+			brightness = 50;
 			if (clickType == 5) {
 				clickType = 0;
 				setupMode = 0;
@@ -537,7 +389,7 @@ int main(void) {
 					time.Hours = dispValue / 100;
 					time.Minutes = dispValue % 100;
 					time.Seconds = 0;
-					HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
+					//HAL_RTC_SetTime(&hrtc, &time, RTC_FORMAT_BIN);
 				}
 
 				break;
@@ -705,20 +557,15 @@ void SystemClock_Config(void) {
 	 */
 	HAL_PWREx_ControlVoltageScaling(PWR_REGULATOR_VOLTAGE_SCALE1);
 
-	/** Configure LSE Drive Capability
-	 */
-	HAL_PWR_EnableBkUpAccess();
-	__HAL_RCC_LSEDRIVE_CONFIG(RCC_LSEDRIVE_LOW);
-
 	/** Initializes the RCC Oscillators according to the specified parameters
 	 * in the RCC_OscInitTypeDef structure.
 	 */
 	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI
-			| RCC_OSCILLATORTYPE_LSE;
-	RCC_OscInitStruct.LSEState = RCC_LSE_ON;
+			| RCC_OSCILLATORTYPE_LSI;
 	RCC_OscInitStruct.HSIState = RCC_HSI_ON;
 	RCC_OscInitStruct.HSIDiv = RCC_HSI_DIV1;
 	RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
+	RCC_OscInitStruct.LSIState = RCC_LSI_ON;
 	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
 	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
 	RCC_OscInitStruct.PLL.PLLM = RCC_PLLM_DIV1;
@@ -795,6 +642,51 @@ static void MX_ADC1_Init(void) {
 	/* USER CODE BEGIN ADC1_Init 2 */
 
 	/* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
+ * @brief I2C1 Initialization Function
+ * @param None
+ * @retval None
+ */
+static void MX_I2C1_Init(void) {
+
+	/* USER CODE BEGIN I2C1_Init 0 */
+
+	/* USER CODE END I2C1_Init 0 */
+
+	/* USER CODE BEGIN I2C1_Init 1 */
+
+	/* USER CODE END I2C1_Init 1 */
+	hi2c1.Instance = I2C1;
+	hi2c1.Init.Timing = 0x00300F38;
+	hi2c1.Init.OwnAddress1 = 0;
+	hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+	hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+	hi2c1.Init.OwnAddress2 = 0;
+	hi2c1.Init.OwnAddress2Masks = I2C_OA2_NOMASK;
+	hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
+	hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+	if (HAL_I2C_Init(&hi2c1) != HAL_OK) {
+		Error_Handler();
+	}
+
+	/** Configure Analogue filter
+	 */
+	if (HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE)
+			!= HAL_OK) {
+		Error_Handler();
+	}
+
+	/** Configure Digital filter
+	 */
+	if (HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0) != HAL_OK) {
+		Error_Handler();
+	}
+	/* USER CODE BEGIN I2C1_Init 2 */
+
+	/* USER CODE END I2C1_Init 2 */
 
 }
 
@@ -910,51 +802,6 @@ static void MX_TIM14_Init(void) {
 }
 
 /**
- * @brief USART1 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_USART1_UART_Init(void) {
-
-	/* USER CODE BEGIN USART1_Init 0 */
-
-	/* USER CODE END USART1_Init 0 */
-
-	/* USER CODE BEGIN USART1_Init 1 */
-
-	/* USER CODE END USART1_Init 1 */
-	huart1.Instance = USART1;
-	huart1.Init.BaudRate = 115200;
-	huart1.Init.WordLength = UART_WORDLENGTH_8B;
-	huart1.Init.StopBits = UART_STOPBITS_1;
-	huart1.Init.Parity = UART_PARITY_NONE;
-	huart1.Init.Mode = UART_MODE_TX_RX;
-	huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-	huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-	huart1.Init.OneBitSampling = UART_ONE_BIT_SAMPLE_DISABLE;
-	huart1.Init.ClockPrescaler = UART_PRESCALER_DIV1;
-	huart1.AdvancedInit.AdvFeatureInit = UART_ADVFEATURE_NO_INIT;
-	if (HAL_UART_Init(&huart1) != HAL_OK) {
-		Error_Handler();
-	}
-	if (HAL_UARTEx_SetTxFifoThreshold(&huart1, UART_TXFIFO_THRESHOLD_1_8)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	if (HAL_UARTEx_SetRxFifoThreshold(&huart1, UART_RXFIFO_THRESHOLD_1_8)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	if (HAL_UARTEx_DisableFifoMode(&huart1) != HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN USART1_Init 2 */
-
-	/* USER CODE END USART1_Init 2 */
-
-}
-
-/**
  * @brief GPIO Initialization Function
  * @param None
  * @retval None
@@ -965,9 +812,9 @@ static void MX_GPIO_Init(void) {
 	/* USER CODE END MX_GPIO_Init_1 */
 
 	/* GPIO Ports Clock Enable */
-	__HAL_RCC_GPIOC_CLK_ENABLE();
 	__HAL_RCC_GPIOA_CLK_ENABLE();
 	__HAL_RCC_GPIOB_CLK_ENABLE();
+	__HAL_RCC_GPIOC_CLK_ENABLE();
 	__HAL_RCC_GPIOD_CLK_ENABLE();
 
 	/*Configure GPIO pin Output Level */
