@@ -97,7 +97,7 @@ const uint8_t digits[15] = { 0b00111111, // 0
 		0b01111111, // 8
 		0b01101111, // 9
 		0b00000000, // Blank
-		0b01111001, 0b01000100, 0b01000100, 0b00000000 };
+		0b01111001, 0b01010000, 0b01010000, 0b00000000 };
 static GPIO_TypeDef *const SEG_Port[] = { SA_GPIO_Port, SB_GPIO_Port,
 SC_GPIO_Port, SD_GPIO_Port, SE_GPIO_Port, SF_GPIO_Port, SG_GPIO_Port,
 SDP_GPIO_Port };
