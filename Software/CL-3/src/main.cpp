@@ -1,58 +1,52 @@
 #include <Arduino.h>
-#include <driver/adc.h>
+#include <DNSServer.h>
 #include <RTClib.h>
 #include <EEPROM.h>
 #include <Wire.h>
+#include <WiFi.h>
 #include <SPI.h>
-#include "ESPAsyncWebServer.h"
-#include "SPIFFS.h"
+#include <ESPAsyncWebServer.h>
+#include "time.h"
 
-#define PWM_CHANNEL 0
-#define PWM_FREQ 40000
-#define PWM_RESOLUTION 7
-#define PWM_PIN 8
 #define I2C_SDA 47
 #define I2C_SCL 48
 
 uint8_t curDig = 0;
 uint8_t digDelay = 0;
 uint8_t brightness = 100;
-uint32_t dispValue = 1;
-uint32_t newValue = 000000;
-uint16_t pwmValue = 0;
-uint16_t analogValue = 0;
-float voltageValue = 0;
+uint32_t dispValue = 0;
+uint32_t newValue = 0;
 
-const uint8_t COMA_PIN[3] = {42, 4, 13};
-const uint8_t NUM_PIN[10] = {41, 5, 6, 7, 15, 16, 17, 38, 39, 40};
-const uint8_t DIG_PIN[6] = {3, 46, 9, 10, 11, 12};
+const char *APssid = "VfdClock";
+
+hw_timer_t *timer = NULL;
+RTC_DS3231 rtc;
+TwoWire rtci2c = TwoWire(0);
+AsyncWebServer server(80);
 
 uint8_t dispValueTable[6] = {1, 2, 3, 4, 5, 6};
 
-RTC_DS3231 rtc;
-TwoWire rtci2c = TwoWire(0);
+const uint16_t digits[11] = {
+    0b1111111111111101, // 0
+    0b1111101111111111, // 1
+    0b1111110111111111, // 2
+    0b1111111011111111, // 3
+    0b1111111101111111, // 4
+    0b1111111110111111, // 5
+    0b1111111111011111, // 6
+    0b1111111111101111, // 7
+    0b1111111111110111, // 8
+    0b1111111111111011, // 9
+    0b1111111111111111  // Blank
+};
 
-void setValue()
-{
-    for (int i = 0; i < 10; i++)
-        digitalWrite(NUM_PIN[i], LOW);
-    for (int i = 0; i < 6; i++)
-    {
-        // digitalWrite(NUM_PIN[dispValueTable[i]], LOW);
-        // delayMicroseconds(10);
-        digitalWrite(DIG_PIN[i], HIGH);
-        delayMicroseconds(10);
-        digitalWrite(DIG_PIN[i], LOW);
-        // delayMicroseconds(10);
-        // digitalWrite(NUM_PIN[dispValueTable[i]], LOW);
-    }
-    digitalWrite(NUM_PIN[3], HIGH);
-    digitalWrite(DIG_PIN[3], HIGH);
-    delayMicroseconds(10);
-    digitalWrite(DIG_PIN[3], LOW);
-    digitalWrite(NUM_PIN[3], LOW);
+const uint8_t BUT_PIN[3] = {35, 36, 37};
+const uint8_t HVEN_PIN = 38;
+const uint8_t CLK_PIN = 39;
+const uint8_t BLANK_PIN = 40;
+const uint8_t STROBE_PIN = 41;
+const uint8_t DATA_PIN = 42;
 
-}
 void updateTable()
 {
     dispValue = newValue;
@@ -63,117 +57,112 @@ void updateTable()
     dispValueTable[4] = (dispValue / 10000) % 10;
     dispValueTable[5] = (dispValue / 100000) % 10;
 }
+void shiftOut12(uint16_t val)
+{
+    for (int i = 0; i < 12; i++)
+    {
+        digitalWrite(DATA_PIN, ((val >> i) & 1));
+        delayMicroseconds(1);
+        digitalWrite(CLK_PIN, HIGH);
+        delayMicroseconds(1);
+        digitalWrite(CLK_PIN, LOW);
+        delayMicroseconds(1);
+    }
+}
+
+void setValue(bool isBlank)
+{
+    updateTable();
+    digitalWrite(STROBE_PIN, LOW);
+    for (int i = 0; i < 6; i++)
+        shiftOut12(isBlank ? 10 : digits[dispValueTable[i]]);
+    digitalWrite(STROBE_PIN, HIGH);
+}
+
+const char *PARAM_INPUT = "value";
+
+const char index_html[] PROGMEM = R"rawliteral(
+    <!DOCTYPE HTML><html>
+    <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ESP Web Server</title>
+    <style>
+        html {font-family: Arial; display: inline-block; text-align: center;}
+        h2 {font-size: 2.3rem;}
+        p {font-size: 1.9rem;}
+        body {max-width: 400px; margin:0px auto; padding-bottom: 25px;}
+        .slider { -webkit-appearance: none; margin: 14px; width: 360px; height: 25px; background: #FFD65C;
+        outline: none; -webkit-transition: .2s; transition: opacity .2s;}
+        .slider::-webkit-slider-thumb {-webkit-appearance: none; appearance: none; width: 35px; height: 35px; background: #003249; cursor: pointer;}
+        .slider::-moz-range-thumb { width: 35px; height: 35px; background: #003249; cursor: pointer; } 
+    </style>
+    </head>
+    <body>
+    <h2>Vfd Clock</h2>
+    <button onclick="dateSync(this)">Sync TIme</button>
+    <script>
+    function dateSync(element) {
+    var date = new Date();
+    var current_time = date.getFullYear()+":"+(date.getMonth()+1)+":"+ date.getDate()+":"+date.getHours()+":"+date.getMinutes()+":"+ date.getSeconds();
+    console.log(date);
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "/date?value="+current_time, true);
+    xhr.send();
+    }
+    </script>
+    </body>
+    </html>
+    )rawliteral";
 
 void setup()
 {
     Serial.begin(115200);
+    for (int i = 38; i < 43; i++)
+        pinMode(i, OUTPUT);
     for (int i = 0; i < 3; i++)
-        pinMode(COMA_PIN[i], OUTPUT);
-    for (int i = 0; i < 10; i++)
-        pinMode(NUM_PIN[i], OUTPUT);
-    for (int i = 0; i < 6; i++)
-        pinMode(DIG_PIN[i], OUTPUT);
+        pinMode(BUT_PIN[i], INPUT);
+    digitalWrite(HVEN_PIN, LOW);
+    digitalWrite(BLANK_PIN, 0);
+    setValue(0);
     rtci2c.begin(I2C_SDA, I2C_SCL, 100000);
     rtc.begin(&rtci2c);
     EEPROM.begin(1);
-    if (EEPROM.read(0) != 7)
+    if (digitalRead(BUT_PIN[1]) == LOW)
     {
-        rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-        EEPROM.write(0, 7);
-    }
-    EEPROM.end();
-    ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
-    ledcAttachPin(PWM_PIN, PWM_CHANNEL);
-    ledcWrite(PWM_CHANNEL, 0);
-    adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC1_CHANNEL_0, ADC_ATTEN_DB_11);
-    ledcWrite(PWM_CHANNEL, pwmValue);
-    for (int i = 0; i < 10; i++)
-        digitalWrite(NUM_PIN[i], LOW);
-    for (int i = 0; i < 6; i++)
-    {
-        // digitalWrite(NUM_PIN[dispValueTable[i]], LOW);
-        // delayMicroseconds(10);
-        digitalWrite(DIG_PIN[i], HIGH);
-        delayMicroseconds(10);
-        digitalWrite(DIG_PIN[i], LOW);
-        // delayMicroseconds(10);
-        // digitalWrite(NUM_PIN[dispValueTable[i]], LOW);
-    }
+        WiFi.softAP(APssid);
+        server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
+                  { request->send_P(200, "text/html", index_html); });
 
+        server.on("/date", HTTP_GET, [](AsyncWebServerRequest *request)
+                  {
+                String inputMessage;
+                if (request->hasParam(PARAM_INPUT))
+                {
+                    inputMessage = request->getParam(PARAM_INPUT)->value();
+                    int years, months, days, hours, minutes, seconds;
+                    int   ArrayLength  =inputMessage.length()+1;
+                    char  CharArray[ArrayLength];
+                    inputMessage.toCharArray(CharArray,ArrayLength);
+                    sscanf(CharArray, "%d:%d:%d:%d:%d:%d", &years, &months, &days, &hours, &minutes, &seconds);
+                    rtc.adjust(DateTime(years,months,days,hours,minutes,seconds));
+                }
+                else
+                {
+                    inputMessage = "No message sent";
+                }
+                request->send(200, "text/plain", "OK"); });
+        server.begin();
+    }
 }
-float highestVoltage = 0;
-uint32_t bestFreq = 0;
+
 void loop()
 {
-    // Poniższy fragment kodu obsługuje przetwornicę. WAŻNE, NIE DAWAĆ DELAY W KODZIE BO MOŻE, ale nie musi, MOŻE SIĘ COŚ ZEPSUĆ
-    ledcWrite(PWM_CHANNEL, pwmValue);
-    analogValue = adc1_get_raw(ADC1_CHANNEL_0);
-    float voltageValue = analogValue * 0.04815;
-    pwmValue=125;
-    // if (170 < voltageValue)
-    // {
-    //     if (pwmValue > 0)
-    //         pwmValue--;
-    // }
-    // else
-    // {
-    //     if (pwmValue < 125)
-    //         pwmValue++;
-    // }
-    // if (highestVoltage < voltageValue)
-    //{
-    //      bestFreq = ledcReadFreq(PWM_CHANNEL);
-    //      highestVoltage = voltageValue;
-    //  }
-    //  delay(300);
-    Serial.println("Analog Value: " + String(analogValue) + " Voltage Value: " + String(voltageValue) + " PWM Value " + String(pwmValue));
-
-    // if (pwmValue == 60)
-    // {
-    //     pwmValue = 0;
-    //     ledcChangeFrequency(PWM_CHANNEL, ledcReadFreq(PWM_CHANNEL) + 5000, PWM_RESOLUTION);
-    // }
-
     DateTime time = rtc.now();
-    digitalWrite(NUM_PIN[3], HIGH);
-    digitalWrite(DIG_PIN[3], HIGH);
-    delayMicroseconds(10);
-    digitalWrite(DIG_PIN[3], LOW);
-    digitalWrite(NUM_PIN[3], LOW);
-    delay(2);
-    digitalWrite(DIG_PIN[3], HIGH);
-    delayMicroseconds(10);
-    digitalWrite(DIG_PIN[3], LOW);
-
-    digitalWrite(NUM_PIN[2], HIGH);
-    digitalWrite(DIG_PIN[2], HIGH);
-    delayMicroseconds(10);
-    digitalWrite(DIG_PIN[2], LOW);
-    digitalWrite(NUM_PIN[2], LOW);
-    delay(2);
-    digitalWrite(DIG_PIN[2], HIGH);
-    delayMicroseconds(10);
-    digitalWrite(DIG_PIN[2], LOW);
-
-    digitalWrite(NUM_PIN[8], HIGH);
-    digitalWrite(DIG_PIN[6], HIGH);
-    delayMicroseconds(10);
-    digitalWrite(DIG_PIN[6], LOW);
-    digitalWrite(NUM_PIN[8], LOW);
-    delay(2);
-    digitalWrite(DIG_PIN[6], HIGH);
-    delayMicroseconds(10);
-    digitalWrite(DIG_PIN[6], LOW);
-
-    digitalWrite(NUM_PIN[7], HIGH);
-    digitalWrite(DIG_PIN[4], HIGH);
-    delayMicroseconds(10);
-    digitalWrite(DIG_PIN[4], LOW);
-    digitalWrite(NUM_PIN[7], LOW);
-    delay(2);
-    digitalWrite(DIG_PIN[4], HIGH);
-    delayMicroseconds(10);
-    digitalWrite(DIG_PIN[4], LOW);
-    
+    newValue = time.second();
+    newValue += time.minute() * 100;
+    newValue += time.hour() * 10000;
+    if (newValue != dispValue)
+    {
+        setValue(0);
+    }
 }
