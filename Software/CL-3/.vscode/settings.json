@@ -11,6 +11,13 @@
         "ostream": "cpp",
         "sstream": "cpp",
         "streambuf": "cpp",
-        "regex": "cpp"
+        "regex": "cpp",
+        "functional": "cpp",
+        "bitset": "cpp",
+        "string": "cpp",
+        "vector": "cpp",
+        "limits": "cpp",
+        "utility": "cpp",
+        "cmath": "cpp"
     }
 }
